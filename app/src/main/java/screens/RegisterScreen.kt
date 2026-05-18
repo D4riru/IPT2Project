@@ -20,6 +20,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 
 @Composable
 fun RegisterScreen(navController: NavController) {
@@ -31,6 +32,7 @@ fun RegisterScreen(navController: NavController) {
     var showConfirmPassword by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
 
     fun handleRegister() {
         if (email.isBlank() || password.isBlank() || confirmPassword.isBlank()) {
@@ -42,10 +44,19 @@ fun RegisterScreen(navController: NavController) {
             return
         }
         isLoading = true
+        errorMessage = null
         
-        // Mocking a successful registration
-        navController.navigate("tabs") {
-            popUpTo("welcome") { inclusive = true }
+        com.example.myapplication.network.ApiClient.register(fullName, email, password) { response ->
+            coroutineScope.launch {
+                isLoading = false
+                if (response.status == "success") {
+                    navController.navigate("tabs") {
+                        popUpTo("welcome") { inclusive = true }
+                    }
+                } else {
+                    errorMessage = response.message
+                }
+            }
         }
     }
 

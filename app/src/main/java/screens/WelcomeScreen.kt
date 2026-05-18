@@ -38,20 +38,9 @@ fun WelcomeScreen(navController: NavController) {
         // Top Header
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Menu, contentDescription = null, tint = Color(0xFF006156))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("FlashLearn", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF006156))
-            }
-            Box(
-                modifier = Modifier.size(32.dp).background(Color(0xFF006156), RoundedCornerShape(16.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-            }
+            Text("FlashLearn", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color(0xFF006156))
         }
 
         Spacer(modifier = Modifier.height(40.dp))
@@ -172,13 +161,7 @@ fun WelcomeScreen(navController: NavController) {
             Text("FlashLearn", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF006156))
             Spacer(modifier = Modifier.height(8.dp))
             Text("Study anywhere. Offline access included.", fontSize = 12.sp, color = Color(0xFF6B7280))
-            Spacer(modifier = Modifier.height(24.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                Text("Privacy", fontSize = 12.sp, color = Color(0xFF4B5563))
-                Text("Terms", fontSize = 12.sp, color = Color(0xFF4B5563))
-                Text("Contact", fontSize = 12.sp, color = Color(0xFF4B5563))
-            }
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             Text("© 2024 FlashLearn. Built for Focus.", fontSize = 10.sp, color = Color(0xFF9CA3AF))
         }
     }

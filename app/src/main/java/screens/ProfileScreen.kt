@@ -82,13 +82,13 @@ fun ProfileScreen(navController: NavController) {
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Student Explorer",
+            text = com.example.myapplication.network.ApiClient.currentUser?.fullName ?: "Student Explorer",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF1F2937)
         )
         Text(
-            text = "student@example.com",
+            text = com.example.myapplication.network.ApiClient.currentUser?.email ?: "student@example.com",
             fontSize = 14.sp,
             color = Color(0xFF6B7280)
         )
@@ -119,6 +119,7 @@ fun ProfileScreen(navController: NavController) {
         // Sign Out Controller
         Button(
             onClick = {
+                com.example.myapplication.network.ApiClient.currentUser = null
                 navController.navigate("welcome") { popUpTo(0) }
             },
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFEE2E2), contentColor = Color(0xFFDC2626)),

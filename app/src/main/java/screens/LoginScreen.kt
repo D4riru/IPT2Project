@@ -38,9 +38,18 @@ fun LoginScreen(navController: NavController) {
             return
         }
         isLoading = true
-        // Mocking successful login
-        navController.navigate("tabs") {
-            popUpTo("welcome") { inclusive = true }
+        errorMessage = null
+        com.example.myapplication.network.ApiClient.login(email, password) { response ->
+            coroutineScope.launch {
+                isLoading = false
+                if (response.status == "success") {
+                    navController.navigate("tabs") {
+                        popUpTo("welcome") { inclusive = true }
+                    }
+                } else {
+                    errorMessage = response.message
+                }
+            }
         }
     }
 

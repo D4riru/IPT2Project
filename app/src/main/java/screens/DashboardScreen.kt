@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 
 data class ModuleData(
     val id: String,
@@ -30,16 +31,26 @@ data class ModuleData(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(navController: NavController) {
-    // Hardcoded dummy data for modules
-    var modules by remember { mutableStateOf<List<ModuleData>>(
-        listOf(
-            ModuleData("1", "Fundamentals of Biology", "Ready", 15),
-            ModuleData("2", "World History 101", "In Progress", 8),
-            ModuleData("3", "Modern Art", "Ready", 12)
-        )
-    ) }
-    var isLoading by remember { mutableStateOf(false) }
+    var modules by remember { mutableStateOf<List<ModuleData>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
     var showFabOptions by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var newModuleTitle by remember { mutableStateOf("") }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editingModuleId by remember { mutableStateOf("") }
+    var editingModuleTitle by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        com.example.myapplication.network.ApiClient.getModules { fetchedModules ->
+            coroutineScope.launch {
+                modules = fetchedModules.map { m ->
+                    ModuleData(m.id, m.title, m.status, m.flashcardCount)
+                }
+                isLoading = false
+            }
+        }
+    }
 
     Scaffold(
         floatingActionButton = {
@@ -70,7 +81,7 @@ fun DashboardScreen(navController: NavController) {
                 Column {
                     Text("Welcome back,", fontSize = 14.sp, color = Color(0xFF6B7280))
                     Text(
-                        text = "Student",
+                        text = com.example.myapplication.network.ApiClient.currentUser?.fullName ?: "Student",
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF1F2937)
@@ -132,7 +143,36 @@ fun DashboardScreen(navController: NavController) {
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text("${module.flashcardCount} Flashcards • ${module.status}", fontSize = 12.sp, color = Color(0xFF6B7280))
                                 }
-                                Icon(Icons.Default.PlayArrow, contentDescription = "Practice", tint = Color(0xFF006156))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = {
+                                            editingModuleId = module.id
+                                            editingModuleTitle = module.title
+                                            showEditDialog = true
+                                        },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(Icons.Default.Edit, contentDescription = "Edit Module", tint = Color(0xFF6B7280), modifier = Modifier.size(20.dp))
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            com.example.myapplication.network.ApiClient.deleteModule(module.id) { success ->
+                                                com.example.myapplication.network.ApiClient.getModules { fetchedModules ->
+                                                    coroutineScope.launch {
+                                                        modules = fetchedModules.map { m ->
+                                                            ModuleData(m.id, m.title, m.status, m.flashcardCount)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Delete Module", tint = Color(0xFFDC2626), modifier = Modifier.size(20.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Icon(Icons.Default.PlayArrow, contentDescription = "Practice", tint = Color(0xFF006156))
+                                }
                             }
                         }
                     }
@@ -144,8 +184,20 @@ fun DashboardScreen(navController: NavController) {
         if (showFabOptions) {
             ModalBottomSheet(onDismissRequest = { showFabOptions = false }) {
                 Column(modifier = Modifier.padding(24.dp).fillMaxWidth()) {
-                    Text("Create New Module", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
+                    Text("Module Actions", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
                     Spacer(modifier = Modifier.height(24.dp))
+
+                    ListItem(
+                        headlineContent = { Text("Create Manually", fontWeight = FontWeight.Bold) },
+                        supportingContent = { Text("Add a new empty module to your study library.") },
+                        leadingContent = { Icon(Icons.Default.AddCircle, contentDescription = null, tint = Color(0xFF006156)) },
+                        modifier = Modifier.clickable {
+                            showFabOptions = false
+                            showCreateDialog = true
+                        }
+                    )
+                    
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                     ListItem(
                         headlineContent = { Text("Upload Document", fontWeight = FontWeight.Bold) },
@@ -153,12 +205,105 @@ fun DashboardScreen(navController: NavController) {
                         leadingContent = { Icon(Icons.Default.UploadFile, contentDescription = null, tint = Color(0xFF006156)) },
                         modifier = Modifier.clickable {
                             showFabOptions = false
-                            // Trigger your file picker logic here
                         }
                     )
                     Spacer(modifier = Modifier.height(32.dp))
                 }
             }
+        }
+
+        // Create Module Dialog
+        if (showCreateDialog) {
+            AlertDialog(
+                onDismissRequest = { showCreateDialog = false },
+                title = { Text("Create New Module", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text("Enter the title for your study module:")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = newModuleTitle,
+                            onValueChange = { newModuleTitle = it },
+                            placeholder = { Text("e.g. Organic Chemistry") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (newModuleTitle.isNotBlank()) {
+                                com.example.myapplication.network.ApiClient.createModule(newModuleTitle) { success ->
+                                    com.example.myapplication.network.ApiClient.getModules { fetchedModules ->
+                                        coroutineScope.launch {
+                                            modules = fetchedModules.map { m ->
+                                                ModuleData(m.id, m.title, m.status, m.flashcardCount)
+                                            }
+                                            showCreateDialog = false
+                                            newModuleTitle = ""
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF006156))
+                    ) {
+                        Text("Create")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCreateDialog = false }) {
+                        Text("Cancel", color = Color(0xFF6B7280))
+                    }
+                }
+            )
+        }
+
+        // Edit Module Dialog
+        if (showEditDialog) {
+            AlertDialog(
+                onDismissRequest = { showEditDialog = false },
+                title = { Text("Rename Module", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text("Enter the new title for your study module:")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = editingModuleTitle,
+                            onValueChange = { editingModuleTitle = it },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (editingModuleTitle.isNotBlank()) {
+                                com.example.myapplication.network.ApiClient.updateModule(editingModuleId, editingModuleTitle) { success ->
+                                    com.example.myapplication.network.ApiClient.getModules { fetchedModules ->
+                                        coroutineScope.launch {
+                                            modules = fetchedModules.map { m ->
+                                                ModuleData(m.id, m.title, m.status, m.flashcardCount)
+                                            }
+                                            showEditDialog = false
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF006156))
+                    ) {
+                        Text("Save")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showEditDialog = false }) {
+                        Text("Cancel", color = Color(0xFF6B7280))
+                    }
+                }
+            )
         }
     }
 }

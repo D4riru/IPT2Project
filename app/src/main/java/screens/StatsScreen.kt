@@ -9,7 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -17,9 +17,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 
 @Composable
 fun StatsScreen(navController: NavController) {
+    var masteredPercentage by remember { mutableStateOf("0%") }
+    var needsReviewCount by remember { mutableStateOf("0 Cards") }
+    var needsReviewQuestion by remember { mutableStateOf("No items requiring review.") }
+    var needsReviewHint by remember { mutableStateOf("Finish quizzes to see reviews here.") }
+    var isLoading by remember { mutableStateOf(true) }
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        com.example.myapplication.network.ApiClient.getStats { stats ->
+            coroutineScope.launch {
+                masteredPercentage = stats.masteredPercentage
+                needsReviewCount = stats.needsReviewCount
+                needsReviewQuestion = stats.needsReviewQuestion
+                needsReviewHint = stats.needsReviewHint
+                isLoading = false
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -35,42 +55,48 @@ fun StatsScreen(navController: NavController) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Fast Stats Grid
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            StatBox(modifier = Modifier.weight(1f), title = "Mastered", value = "85%", color = Color(0xFF16A34A))
-            StatBox(modifier = Modifier.weight(1f), title = "Needs Review", value = "3 Cards", color = Color(0xFFDC2626))
-        }
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color(0xFF006156))
+            }
+        } else {
+            // Fast Stats Grid
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                StatBox(modifier = Modifier.weight(1f), title = "Mastered", value = masteredPercentage, color = Color(0xFF16A34A))
+                StatBox(modifier = Modifier.weight(1f), title = "Needs Review", value = needsReviewCount, color = Color(0xFFDC2626))
+            }
 
-        Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
-        Text("NEEDS REVIEW", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
-        Spacer(modifier = Modifier.height(16.dp))
+            Text("NEEDS REVIEW", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        // Specific Item Requiring Review Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Text(
-                    text = "What is the capital of the Byzantine Empire?",
-                    fontSize = 15.sp,
-                    color = Color(0xFF1F2937),
-                    fontWeight = FontWeight.Medium
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFFF7FAF9), RoundedCornerShape(12.dp))
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFF006156), modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Hint: It was renamed to Istanbul in modern geography.", fontSize = 12.sp, color = Color(0xFF4B5563))
+            // Specific Item Requiring Review Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        text = needsReviewQuestion,
+                        fontSize = 15.sp,
+                        color = Color(0xFF1F2937),
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFF7FAF9), RoundedCornerShape(12.dp))
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFF006156), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(needsReviewHint, fontSize = 12.sp, color = Color(0xFF4B5563))
+                    }
                 }
             }
         }

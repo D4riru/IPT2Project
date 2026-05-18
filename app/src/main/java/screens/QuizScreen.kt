@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 data class Flashcard(
     val category: String,
@@ -36,17 +37,42 @@ val fallbackQuizData = listOf(
 
 @Composable
 fun QuizScreen(navController: NavController, moduleId: String? = null) {
+    var quizData by remember { mutableStateOf<List<Flashcard>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
     var currentIndex by remember { mutableStateOf(0) }
     var selectedOption by remember { mutableStateOf<Int?>(null) }
     var isFinished by remember { mutableStateOf(false) }
     var timeLeft by remember { mutableStateOf(15) }
     var score by remember { mutableStateOf(0) }
+    val coroutineScope = rememberCoroutineScope()
 
-    val currentCard = fallbackQuizData.getOrNull(currentIndex)
+    LaunchedEffect(moduleId) {
+        if (moduleId != null) {
+            com.example.myapplication.network.ApiClient.getQuiz(moduleId) { fetchedCards ->
+                coroutineScope.launch {
+                    quizData = fetchedCards.map { c ->
+                        Flashcard(c.category, c.question, c.options, c.correctIndex)
+                    }
+                    isLoading = false
+                }
+            }
+        } else {
+            quizData = fallbackQuizData
+            isLoading = false
+        }
+    }
+
+    LaunchedEffect(isFinished) {
+        if (isFinished && quizData.isNotEmpty()) {
+            com.example.myapplication.network.ApiClient.updateStats(score, quizData.size)
+        }
+    }
+
+    val currentCard = quizData.getOrNull(currentIndex)
 
     // Spaced repetition timer loop
-    LaunchedEffect(currentIndex, isFinished) {
-        if (isFinished) return@LaunchedEffect
+    LaunchedEffect(currentIndex, isFinished, quizData) {
+        if (isFinished || quizData.isEmpty()) return@LaunchedEffect
         timeLeft = 15
         while (timeLeft > 0 && selectedOption == null) {
             delay(1000)
@@ -54,7 +80,7 @@ fun QuizScreen(navController: NavController, moduleId: String? = null) {
         }
         // Auto-advance if time runs out
         if (timeLeft == 0 && selectedOption == null) {
-            if (currentIndex < fallbackQuizData.size - 1) {
+            if (currentIndex < quizData.size - 1) {
                 currentIndex++
             } else {
                 isFinished = true
@@ -72,7 +98,7 @@ fun QuizScreen(navController: NavController, moduleId: String? = null) {
 
     fun handleNext() {
         selectedOption = null
-        if (currentIndex < fallbackQuizData.size - 1) {
+        if (currentIndex < quizData.size - 1) {
             currentIndex++
         } else {
             isFinished = true
@@ -111,7 +137,11 @@ fun QuizScreen(navController: NavController, moduleId: String? = null) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        if (isFinished) {
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color(0xFF006156))
+            }
+        } else if (isFinished) {
             // Results State
             Column(
                 modifier = Modifier.fillMaxSize(),
@@ -120,7 +150,7 @@ fun QuizScreen(navController: NavController, moduleId: String? = null) {
             ) {
                 Text("Practice Complete!", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("You scored $score out of ${fallbackQuizData.size}", fontSize = 16.sp, color = Color(0xFF6B7280))
+                Text("You scored $score out of ${quizData.size}", fontSize = 16.sp, color = Color(0xFF6B7280))
                 Spacer(modifier = Modifier.height(40.dp))
                 Button(
                     onClick = { navController.popBackStack() },
@@ -133,7 +163,7 @@ fun QuizScreen(navController: NavController, moduleId: String? = null) {
         } else if (currentCard != null) {
             // Progress Bar
             LinearProgressIndicator(
-                progress = { (currentIndex + 1).toFloat() / fallbackQuizData.size },
+                progress = { (currentIndex + 1).toFloat() / quizData.size },
                 modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
                 color = Color(0xFF006156),
                 trackColor = Color(0xFFE5E7EB)
