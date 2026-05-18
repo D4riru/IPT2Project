@@ -27,11 +27,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 
 @Composable
 fun ProfileScreen(navController: NavController) {
-    var photoUri by remember { mutableStateOf<Uri?>(null) }
+    val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("flashlearn_prefs", android.content.Context.MODE_PRIVATE) }
+    var photoUri by remember {
+        mutableStateOf<Uri?>(
+            sharedPrefs.getString("profile_image_uri_${com.example.myapplication.network.ApiClient.currentUser?.id}", null)?.let { Uri.parse(it) }
+        )
+    }
 
     // Native image picker configuration replacing expo-image-picker
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -39,7 +46,7 @@ fun ProfileScreen(navController: NavController) {
     ) { uri: Uri? ->
         if (uri != null) {
             photoUri = uri
-            // Handle saving URI locally if needed
+            sharedPrefs.edit().putString("profile_image_uri_${com.example.myapplication.network.ApiClient.currentUser?.id}", uri.toString()).apply()
         }
     }
 

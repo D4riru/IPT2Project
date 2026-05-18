@@ -69,18 +69,33 @@ fun RegisterScreen(navController: NavController) {
     ) {
         Spacer(modifier = Modifier.height(40.dp))
 
-        IconButton(
-            onClick = { navController.popBackStack() },
-            modifier = Modifier.size(44.dp).background(Color.White, RoundedCornerShape(22.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color(0xFF1F2937))
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-            Text("FlashLearn", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF006156))
-            Box(modifier = Modifier.width(48.dp).height(3.dp).background(Color(0xFF5EEAD4), RoundedCornerShape(2.dp)))
+            IconButton(
+                onClick = { navController.popBackStack() },
+                modifier = Modifier.size(44.dp).background(Color.White, RoundedCornerShape(22.dp))
+            ) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color(0xFF1F2937))
+            }
+            
+            Row(
+                modifier = Modifier.weight(1f).padding(end = 44.dp), // Perfectly offset the back button to mathematically center the logo
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(Color(0xFF006156), RoundedCornerShape(16.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.School, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("FlashLearn", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF006156))
+            }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -100,6 +115,14 @@ fun RegisterScreen(navController: NavController) {
             onValueChange = { fullName = it },
             placeholder = { Text("Full Name") },
             leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF9CA3AF)) },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color(0xFF1F2937),
+                unfocusedTextColor = Color(0xFF1F2937),
+                focusedBorderColor = Color(0xFF006156),
+                focusedLabelColor = Color(0xFF006156),
+                cursorColor = Color(0xFF006156),
+                unfocusedBorderColor = Color(0xFFE5E7EB)
+            ),
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
         )
@@ -111,6 +134,14 @@ fun RegisterScreen(navController: NavController) {
             onValueChange = { email = it },
             placeholder = { Text("Email Address") },
             leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = Color(0xFF9CA3AF)) },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color(0xFF1F2937),
+                unfocusedTextColor = Color(0xFF1F2937),
+                focusedBorderColor = Color(0xFF006156),
+                focusedLabelColor = Color(0xFF006156),
+                cursorColor = Color(0xFF006156),
+                unfocusedBorderColor = Color(0xFFE5E7EB)
+            ),
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
         )
@@ -127,6 +158,14 @@ fun RegisterScreen(navController: NavController) {
                     Icon(if (showPassword) Icons.Default.Visibility else Icons.Default.VisibilityOff, null, tint = Color(0xFF9CA3AF))
                 }
             },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color(0xFF1F2937),
+                unfocusedTextColor = Color(0xFF1F2937),
+                focusedBorderColor = Color(0xFF006156),
+                focusedLabelColor = Color(0xFF006156),
+                cursorColor = Color(0xFF006156),
+                unfocusedBorderColor = Color(0xFFE5E7EB)
+            ),
             visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -144,6 +183,14 @@ fun RegisterScreen(navController: NavController) {
                     Icon(if (showConfirmPassword) Icons.Default.Visibility else Icons.Default.VisibilityOff, null, tint = Color(0xFF9CA3AF))
                 }
             },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color(0xFF1F2937),
+                unfocusedTextColor = Color(0xFF1F2937),
+                focusedBorderColor = Color(0xFF006156),
+                focusedLabelColor = Color(0xFF006156),
+                cursorColor = Color(0xFF006156),
+                unfocusedBorderColor = Color(0xFFE5E7EB)
+            ),
             visualTransformation = if (showConfirmPassword) VisualTransformation.None else PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)

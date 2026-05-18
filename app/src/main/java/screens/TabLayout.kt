@@ -55,7 +55,7 @@ fun TabLayout(navController: NavController) {
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
             when (selectedTab) {
-                is TabScreen.Dashboard -> DashboardScreen(navController)
+                is TabScreen.Dashboard -> DashboardScreen(navController, onNavigateToProfile = { selectedTab = TabScreen.Profile })
                 is TabScreen.Stats -> StatsScreen(navController)
                 is TabScreen.Profile -> ProfileScreen(navController)
             }

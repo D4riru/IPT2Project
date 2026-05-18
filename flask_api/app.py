@@ -223,20 +223,25 @@ def create_module():
     
     title = data['title']
     status = data.get('status', 'Ready')
+    cards = data.get('cards', [])
     
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
             cursor.execute(
-                "INSERT INTO modules (title, status, flashcard_count) VALUES (%s, %s, 3)",
-                (title, status)
+                "INSERT INTO modules (title, status, flashcard_count) VALUES (%s, %s, %s)",
+                (title, status, len(cards))
             )
             module_id = cursor.lastrowid
             
-            # Seed 3 dynamic mock cards for the new module
-            cursor.execute("INSERT INTO flashcards (module_id, category, question, options, correct_index) VALUES (%s, 'GENERAL', 'What is the capital of France?', 'Berlin|||Madrid|||Paris|||Rome', 2)", (module_id,))
-            cursor.execute("INSERT INTO flashcards (module_id, category, question, options, correct_index) VALUES (%s, 'MATH', 'What is 5 + 7?', '10|||11|||12|||13', 2)", (module_id,))
-            cursor.execute("INSERT INTO flashcards (module_id, category, question, options, correct_index) VALUES (%s, 'SCIENCE', 'What is the chemical symbol for Water?', 'O2|||CO2|||H2O|||NaCl', 2)", (module_id,))
+            # Insert each custom-made flashcard into MySQL
+            for card in cards:
+                q = card.get('question', '')
+                a = card.get('answer', '')
+                cursor.execute(
+                    "INSERT INTO flashcards (module_id, category, question, options, correct_index) VALUES (%s, 'GENERAL', %s, %s, 0)",
+                    (module_id, q, a)
+                )
             
             conn.commit()
         conn.close()

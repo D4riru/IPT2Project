@@ -2,6 +2,7 @@ package com.example.myapplication.network
 
 import android.util.Log
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -11,7 +12,11 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 // Models matching our REST API and app expectations
-data class User(val id: Int, val fullName: String, val email: String)
+data class User(
+    val id: Int,
+    @SerializedName("full_name") val fullName: String,
+    val email: String
+)
 data class AuthResponse(val status: String, val message: String, val user: User?)
 data class ModuleData(val id: String, val title: String, val status: String, val flashcardCount: Int)
 data class Flashcard(val category: String, val question: String, val options: List<String>, val correctIndex: Int)
@@ -23,7 +28,7 @@ object ApiClient {
     // IMPORTANT: 
     // - Use "http://10.0.2.2:5000" if running in the Android Emulator.
     // - Replace with your laptop's local IP (e.g. "http://192.168.1.X:5000") if debugging on a physical Xiaomi/Redmi device!
-    var baseUrl = "http://172.20.62.139:5000"
+    var baseUrl = "http://10.171.32.177:5000"
 
     
     // Keep track of logged-in user
@@ -120,13 +125,7 @@ object ApiClient {
         client.newCall(request).enqueue(object : okhttp3.Callback {
             override fun onFailure(call: okhttp3.Call, e: IOException) {
                 Log.e(TAG, "Get modules failed or offline: ${e.message}")
-                // Fallback to local hardcoded mock modules
-                val mockModules = listOf(
-                    ModuleData("1", "Fundamentals of Biology", "Ready", 3),
-                    ModuleData("2", "World History 101", "In Progress", 3),
-                    ModuleData("3", "Modern Art", "Ready", 3)
-                )
-                onResult(mockModules)
+                onResult(emptyList())
             }
 
             override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
@@ -145,8 +144,8 @@ object ApiClient {
     }
 
     // 3a. Create Module
-    fun createModule(title: String, status: String = "Ready", onResult: (Boolean) -> Unit) {
-        val payload = mapOf("title" to title, "status" to status)
+    fun createModule(title: String, cards: List<Map<String, String>> = emptyList(), status: String = "Ready", onResult: (Boolean) -> Unit) {
+        val payload = mapOf("title" to title, "status" to status, "cards" to cards)
         val body = gson.toJson(payload).toRequestBody(jsonMediaType)
         val request = Request.Builder().url("$baseUrl/api/modules").post(body).build()
         

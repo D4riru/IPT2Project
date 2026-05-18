@@ -21,6 +21,10 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 data class Flashcard(
     val category: String,
@@ -37,12 +41,15 @@ val fallbackQuizData = listOf(
 
 @Composable
 fun QuizScreen(navController: NavController, moduleId: String? = null) {
+    val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("flashlearn_prefs", android.content.Context.MODE_PRIVATE) }
     var quizData by remember { mutableStateOf<List<Flashcard>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var currentIndex by remember { mutableStateOf(0) }
-    var selectedOption by remember { mutableStateOf<Int?>(null) }
+    var typedAnswer by remember { mutableStateOf("") }
+    var isAnswerChecked by remember { mutableStateOf(false) }
+    var isCorrectAnswer by remember { mutableStateOf(false) }
     var isFinished by remember { mutableStateOf(false) }
-    var timeLeft by remember { mutableStateOf(15) }
     var score by remember { mutableStateOf(0) }
     val coroutineScope = rememberCoroutineScope()
 
@@ -70,34 +77,40 @@ fun QuizScreen(navController: NavController, moduleId: String? = null) {
 
     val currentCard = quizData.getOrNull(currentIndex)
 
-    // Spaced repetition timer loop
-    LaunchedEffect(currentIndex, isFinished, quizData) {
-        if (isFinished || quizData.isEmpty()) return@LaunchedEffect
-        timeLeft = 15
-        while (timeLeft > 0 && selectedOption == null) {
-            delay(1000)
-            timeLeft--
-        }
-        // Auto-advance if time runs out
-        if (timeLeft == 0 && selectedOption == null) {
-            if (currentIndex < quizData.size - 1) {
-                currentIndex++
-            } else {
-                isFinished = true
+    fun handleCheckAnswer() {
+        if (isAnswerChecked || currentCard == null) return
+        isAnswerChecked = true
+        val correctAnswerVal = currentCard.options.getOrNull(currentCard.correctIndex) ?: ""
+        val correct = typedAnswer.trim().equals(correctAnswerVal.trim(), ignoreCase = true)
+        isCorrectAnswer = correct
+        if (correct) {
+            score++
+        } else {
+            // Save to failed questions pool in sharedPrefs for "Needs Review"
+            val failedListJson = sharedPrefs.getString("failed_questions", "[]") ?: "[]"
+            val failedList = try {
+                val type = object : TypeToken<List<Map<String, String>>>() {}.type
+                Gson().fromJson<List<Map<String, String>>>(failedListJson, type).toMutableList()
+            } catch(e: Exception) {
+                mutableListOf()
+            }
+            
+            // Avoid duplicate question entries in the pool
+            if (failedList.none { it["question"] == currentCard.question }) {
+                failedList.add(mapOf("question" to currentCard.question, "answer" to correctAnswerVal))
+                // Max limit of 10 entries in failed pool to avoid clutter
+                if (failedList.size > 10) {
+                    failedList.removeAt(0)
+                }
+                sharedPrefs.edit().putString("failed_questions", Gson().toJson(failedList)).apply()
             }
         }
     }
 
-    fun handleSelection(index: Int) {
-        if (selectedOption != null) return
-        selectedOption = index
-        if (index == currentCard?.correctIndex) {
-            score++
-        }
-    }
-
     fun handleNext() {
-        selectedOption = null
+        typedAnswer = ""
+        isAnswerChecked = false
+        isCorrectAnswer = false
         if (currentIndex < quizData.size - 1) {
             currentIndex++
         } else {
@@ -128,11 +141,7 @@ fun QuizScreen(navController: NavController, moduleId: String? = null) {
                 color = Color(0xFF006156),
                 fontSize = 14.sp
             )
-            Text(
-                text = "${timeLeft}s",
-                fontWeight = FontWeight.Bold,
-                color = if (timeLeft > 5) Color(0xFF1F2937) else Color.Red
-            )
+            Spacer(modifier = Modifier.width(44.dp))
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -157,7 +166,7 @@ fun QuizScreen(navController: NavController, moduleId: String? = null) {
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF006156)),
                     modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) {
-                    Text("Finish Review")
+                    Text("Finish Review", color = Color.White)
                 }
             }
         } else if (currentCard != null) {
@@ -195,54 +204,86 @@ fun QuizScreen(navController: NavController, moduleId: String? = null) {
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Answers Options Grid
-            currentCard.options.forEachIndexed { index, option ->
-                val isSelected = selectedOption == index
-                val isCorrect = index == currentCard.correctIndex
-
-                val containerColor = when {
-                    selectedOption == null -> Color.White
-                    isCorrect -> Color(0xFFDCFCE7)
-                    isSelected && !isCorrect -> Color(0xFFFEE2E2)
-                    else -> Color.White
-                }
-
-                Button(
-                    onClick = { handleSelection(index) },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp).height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = containerColor,
-                        contentColor = Color(0xFF1F2937)
-                    ),
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 1.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+            // Answer Entry Area
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (!isAnswerChecked) {
+                    OutlinedTextField(
+                        value = typedAnswer,
+                        onValueChange = { typedAnswer = it },
+                        placeholder = { Text("Type your answer here...") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color(0xFF1F2937),
+                            unfocusedTextColor = Color(0xFF1F2937),
+                            focusedBorderColor = Color(0xFF006156),
+                            unfocusedBorderColor = Color(0xFFD1D5DB),
+                            focusedLabelColor = Color(0xFF006156),
+                            cursorColor = Color(0xFF006156)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { handleCheckAnswer() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF006156)),
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        enabled = typedAnswer.isNotBlank()
                     ) {
-                        Text(option, fontSize = 15.sp)
-                        if (selectedOption != null) {
-                            if (isCorrect) {
-                                Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF16A34A))
-                            } else if (isSelected) {
-                                Icon(Icons.Default.Close, contentDescription = null, tint = Color(0xFFDC2626))
+                        Text("Check Answer", color = Color.White)
+                    }
+                } else {
+                    // Answer checked banner feedback
+                    val correctAnswerVal = currentCard.options.getOrNull(currentCard.correctIndex) ?: ""
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isCorrectAnswer) Color(0xFFDCFCE7) else Color(0xFFFEE2E2)
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isCorrectAnswer) Color(0xFF16A34A) else Color(0xFFDC2626)
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (isCorrectAnswer) Icons.Default.Check else Icons.Default.Close,
+                                    contentDescription = null,
+                                    tint = if (isCorrectAnswer) Color(0xFF16A34A) else Color(0xFFDC2626)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isCorrectAnswer) "Correct!" else "Incorrect!",
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isCorrectAnswer) Color(0xFF16A34A) else Color(0xFFDC2626),
+                                    fontSize = 16.sp
+                                )
                             }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Your answer: $typedAnswer",
+                                color = Color(0xFF374151),
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = "Correct answer: $correctAnswerVal",
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1F2937),
+                                fontSize = 14.sp
+                            )
                         }
                     }
-                }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-            if (selectedOption != null) {
-                Button(
-                    onClick = { handleNext() },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF006156)),
-                    modifier = Modifier.fillMaxWidth().height(56.dp)
-                ) {
-                    Text("Next Question")
+                    Button(
+                        onClick = { handleNext() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF006156)),
+                        modifier = Modifier.fillMaxWidth().height(56.dp)
+                    ) {
+                        Text("Next Question", color = Color.White)
+                    }
                 }
             }
         }

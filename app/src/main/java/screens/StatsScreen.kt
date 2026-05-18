@@ -18,23 +18,36 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 @Composable
 fun StatsScreen(navController: NavController) {
+    val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("flashlearn_prefs", android.content.Context.MODE_PRIVATE) }
     var masteredPercentage by remember { mutableStateOf("0%") }
     var needsReviewCount by remember { mutableStateOf("0 Cards") }
-    var needsReviewQuestion by remember { mutableStateOf("No items requiring review.") }
-    var needsReviewHint by remember { mutableStateOf("Finish quizzes to see reviews here.") }
+    var failedQuestionsList by remember { mutableStateOf<List<Map<String, String>>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
+        // Load failed questions from sharedPrefs
+        val failedListJson = sharedPrefs.getString("failed_questions", "[]") ?: "[]"
+        val loadedList = try {
+            val type = object : TypeToken<List<Map<String, String>>>() {}.type
+            Gson().fromJson<List<Map<String, String>>>(failedListJson, type) ?: emptyList()
+        } catch(e: Exception) {
+            emptyList<Map<String, String>>()
+        }
+        failedQuestionsList = loadedList
+
         com.example.myapplication.network.ApiClient.getStats { stats ->
             coroutineScope.launch {
                 masteredPercentage = stats.masteredPercentage
-                needsReviewCount = stats.needsReviewCount
-                needsReviewQuestion = stats.needsReviewQuestion
-                needsReviewHint = stats.needsReviewHint
+                needsReviewCount = "${loadedList.size} Cards"
                 isLoading = false
             }
         }
@@ -51,7 +64,7 @@ fun StatsScreen(navController: NavController) {
 
         Text("RETENTION METRICS", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF9CA3AF))
         Spacer(modifier = Modifier.height(8.dp))
-        Text("Module Overview", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
+        Text("Flashcards Overview", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -71,31 +84,69 @@ fun StatsScreen(navController: NavController) {
             Text("NEEDS REVIEW", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Specific Item Requiring Review Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = needsReviewQuestion,
-                        fontSize = 15.sp,
-                        color = Color(0xFF1F2937),
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFFF7FAF9), RoundedCornerShape(12.dp))
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+            if (failedQuestionsList.isEmpty()) {
+                // Empty state for needs review
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = "No items requiring review.",
+                            fontSize = 15.sp,
+                            color = Color(0xFF1F2937),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFFF7FAF9), RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFF006156), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Finish quizzes with mistakes to see reviews here.", fontSize = 12.sp, color = Color(0xFF4B5563))
+                        }
+                    }
+                }
+            } else {
+                // Show maximum of 2 failed questions in reverse order (newest first)
+                val displayList = failedQuestionsList.takeLast(2).reversed()
+                displayList.forEach { card ->
+                    val q = card["question"] ?: ""
+                    val a = card["answer"] ?: ""
+                    val reversedAnswer = a.reversed()
+                    
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
-                        Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFF006156), modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(needsReviewHint, fontSize = 12.sp, color = Color(0xFF4B5563))
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Text(
+                                text = q,
+                                fontSize = 15.sp,
+                                color = Color(0xFF1F2937),
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFFF7FAF9), RoundedCornerShape(12.dp))
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFF006156), modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Answer (Reversed): $reversedAnswer", fontSize = 12.sp, color = Color(0xFF4B5563), fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
