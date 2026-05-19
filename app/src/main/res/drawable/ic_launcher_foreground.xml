@@ -1,0 +1,25 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Background Shadow Accent -->
+    <path
+        android:fillColor="#1FFFFFFF"
+        android:pathData="M54,20 L92,38 L54,56 L16,38 Z" />
+        
+    <!-- Main Graduation Cap (Mortarboard) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,24 L88,40 L54,56 L20,40 Z" />
+        
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,48 L34,58 C34,68 74,68 74,58 L74,48 C68,52 61,54 54,54 C47,54 40,52 34,48 Z" />
+        
+    <!-- Tassel -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M78,42 L84,54 L84,68 C84,70 82,72 80,72 C78,72 76,70 76,68 L76,54 Z" />
+</vector>
