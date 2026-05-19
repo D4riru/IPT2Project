@@ -32,6 +32,8 @@ fun LoginScreen(navController: NavController) {
     var alertMessage by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     fun handleLogin() {
         if (email.isBlank() || password.isBlank()) {
             errorMessage = "Please enter both email and password."
@@ -43,6 +45,14 @@ fun LoginScreen(navController: NavController) {
             coroutineScope.launch {
                 isLoading = false
                 if (response.status == "success") {
+                    val sharedPrefs = context.getSharedPreferences("flashlearn_prefs", android.content.Context.MODE_PRIVATE)
+                    response.user?.let { u ->
+                        sharedPrefs.edit()
+                            .putInt("logged_in_user_id", u.id)
+                            .putString("logged_in_user_name", u.fullName)
+                            .putString("logged_in_user_email", u.email)
+                            .apply()
+                    }
                     navController.navigate("tabs") {
                         popUpTo("welcome") { inclusive = true }
                     }
@@ -58,8 +68,18 @@ fun LoginScreen(navController: NavController) {
             errorMessage = "Please enter your email address into the input field above so we know where to send the password reset link!"
             return
         }
-        // Mocking forgot password
-        alertMessage = "We've sent password reset instructions to: \n\n$email"
+        isLoading = true
+        errorMessage = null
+        com.example.myapplication.network.ApiClient.forgotPassword(email) { success, message ->
+            coroutineScope.launch {
+                isLoading = false
+                if (success) {
+                    alertMessage = message
+                } else {
+                    errorMessage = message
+                }
+            }
+        }
     }
 
     Column(
@@ -118,7 +138,7 @@ fun LoginScreen(navController: NavController) {
 
         // Error / Alert Displays
         errorMessage?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 16.dp))
+            Text(it, color = Color(0xFFDC2626), modifier = Modifier.padding(bottom = 16.dp))
         }
         alertMessage?.let {
             Text(it, color = Color(0xFF006156), modifier = Modifier.padding(bottom = 16.dp))

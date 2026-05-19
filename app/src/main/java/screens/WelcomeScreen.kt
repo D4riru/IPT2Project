@@ -25,7 +25,21 @@ import coil.compose.AsyncImage
 
 @Composable
 fun WelcomeScreen(navController: NavController) {
-    // No Firebase check needed
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("flashlearn_prefs", android.content.Context.MODE_PRIVATE) }
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        val savedUserId = sharedPrefs.getInt("logged_in_user_id", -1)
+        if (savedUserId != -1) {
+            val savedUserName = sharedPrefs.getString("logged_in_user_name", "") ?: ""
+            val savedUserEmail = sharedPrefs.getString("logged_in_user_email", "") ?: ""
+            com.example.myapplication.network.ApiClient.currentUser = com.example.myapplication.network.User(savedUserId, savedUserName, savedUserEmail)
+            navController.navigate("tabs") {
+                popUpTo("welcome") { inclusive = true }
+            }
+        }
+    }
 
     Column(
         modifier = Modifier

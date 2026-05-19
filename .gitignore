@@ -7,3 +7,7 @@
 .externalNativeBuild
 .cxx
 .DS_Store
+
+# Secrets
+.env
+flask_api/.env

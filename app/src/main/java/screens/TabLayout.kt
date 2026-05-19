@@ -25,9 +25,10 @@ fun TabLayout(navController: NavController) {
     var selectedTab by remember { mutableStateOf<TabScreen>(TabScreen.Dashboard) }
 
     Scaffold(
+        containerColor = Color.White,
         bottomBar = {
             NavigationBar(
-                containerColor = Color(0xFFF7FAF9)
+                containerColor = Color.White
             ) {
                 val tabs = listOf(TabScreen.Dashboard, TabScreen.Stats, TabScreen.Profile)
                 tabs.forEach { tab ->

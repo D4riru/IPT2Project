@@ -29,15 +29,65 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import kotlinx.coroutines.launch
 
 @Composable
 fun ProfileScreen(navController: NavController) {
     val context = LocalContext.current
     val sharedPrefs = remember { context.getSharedPreferences("flashlearn_prefs", android.content.Context.MODE_PRIVATE) }
-    var photoUri by remember {
-        mutableStateOf<Uri?>(
-            sharedPrefs.getString("profile_image_uri_${com.example.myapplication.network.ApiClient.currentUser?.id}", null)?.let { Uri.parse(it) }
-        )
+    var photoUri by remember { mutableStateOf<Uri?>(null) }
+
+    LaunchedEffect(com.example.myapplication.network.ApiClient.currentUser?.id) {
+        val currentUserId = com.example.myapplication.network.ApiClient.currentUser?.id ?: 999
+        if (currentUserId == 999) return@LaunchedEffect
+        val localFile = java.io.File(context.filesDir, "profile_pic_$currentUserId.jpg")
+        if (localFile.exists()) {
+            photoUri = Uri.fromFile(localFile)
+        } else {
+            val savedUriStr = sharedPrefs.getString("profile_image_uri_$currentUserId", null)
+            if (!savedUriStr.isNullOrBlank()) {
+                val tempUri = Uri.parse(savedUriStr)
+                if (tempUri.scheme == "file") {
+                    val tempFile = java.io.File(tempUri.path ?: "")
+                    if (tempFile.exists()) {
+                        photoUri = tempUri
+                    } else {
+                        com.example.myapplication.network.ApiClient.getAvatar(currentUserId) { base64Str ->
+                            if (!base64Str.isNullOrBlank()) {
+                                try {
+                                    val bytes = android.util.Base64.decode(base64Str, android.util.Base64.NO_WRAP)
+                                    localFile.writeBytes(bytes)
+                                    val localUri = Uri.fromFile(localFile)
+                                    photoUri = localUri
+                                    sharedPrefs.edit().putString("profile_image_uri_$currentUserId", localUri.toString()).apply()
+                                } catch(e: Exception) {
+                                    android.util.Log.e("ProfileScreen", "Failed to save downloaded avatar", e)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    photoUri = tempUri
+                }
+            } else {
+                com.example.myapplication.network.ApiClient.getAvatar(currentUserId) { base64Str ->
+                    if (!base64Str.isNullOrBlank()) {
+                        try {
+                            val bytes = android.util.Base64.decode(base64Str, android.util.Base64.NO_WRAP)
+                            localFile.writeBytes(bytes)
+                            val localUri = Uri.fromFile(localFile)
+                            photoUri = localUri
+                            sharedPrefs.edit().putString("profile_image_uri_$currentUserId", localUri.toString()).apply()
+                        } catch(e: Exception) {
+                            android.util.Log.e("ProfileScreen", "Failed to save downloaded avatar", e)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Native image picker configuration replacing expo-image-picker
@@ -45,19 +95,95 @@ fun ProfileScreen(navController: NavController) {
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
-            photoUri = uri
-            sharedPrefs.edit().putString("profile_image_uri_${com.example.myapplication.network.ApiClient.currentUser?.id}", uri.toString()).apply()
+            try {
+                val currentUserId = com.example.myapplication.network.ApiClient.currentUser?.id ?: 999
+                val localFile = java.io.File(context.filesDir, "profile_pic_$currentUserId.jpg")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    localFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                val localUri = Uri.fromFile(localFile)
+                photoUri = localUri
+                sharedPrefs.edit().putString("profile_image_uri_$currentUserId", localUri.toString()).apply()
+                
+                val bytes = localFile.readBytes()
+                val base64Str = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                com.example.myapplication.network.ApiClient.uploadAvatar(currentUserId, base64Str) { success ->
+                    if (success) {
+                        android.util.Log.i("ProfileScreen", "Avatar uploaded successfully to server")
+                    } else {
+                        android.util.Log.e("ProfileScreen", "Avatar upload failed")
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ProfileScreen", "Error saving profile pic", e)
+            }
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF7FAF9))
-            .padding(horizontal = 20.dp)
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally
+    var stats by remember { mutableStateOf<com.example.myapplication.network.StatsResponse?>(null) }
+
+    var isRefreshing by remember { mutableStateOf(false) }
+    @OptIn(ExperimentalMaterial3Api::class)
+    val pullState = rememberPullToRefreshState()
+    val coroutineScope = rememberCoroutineScope()
+
+    fun refreshProfile() {
+        isRefreshing = true
+        val currentUserId = com.example.myapplication.network.ApiClient.currentUser?.id ?: 999
+        if (currentUserId != 999) {
+            val localFile = java.io.File(context.filesDir, "profile_pic_$currentUserId.jpg")
+            com.example.myapplication.network.ApiClient.getAvatar(currentUserId) { base64Str ->
+                if (!base64Str.isNullOrBlank()) {
+                    try {
+                        val bytes = android.util.Base64.decode(base64Str, android.util.Base64.NO_WRAP)
+                        localFile.writeBytes(bytes)
+                        val localUri = Uri.fromFile(localFile)
+                        photoUri = localUri
+                        sharedPrefs.edit().putString("profile_image_uri_$currentUserId", localUri.toString()).apply()
+                    } catch(e: Exception) {
+                        android.util.Log.e("ProfileScreen", "Failed to save downloaded avatar", e)
+                    }
+                }
+            }
+            com.example.myapplication.network.ApiClient.getStats { fetchedStats ->
+                stats = fetchedStats
+                isRefreshing = false
+            }
+        } else {
+            isRefreshing = false
+        }
+    }
+
+    LaunchedEffect(com.example.myapplication.network.ApiClient.currentUser?.id) {
+        com.example.myapplication.network.ApiClient.getStats { fetchedStats ->
+            stats = fetchedStats
+        }
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = { refreshProfile() },
+        state = pullState,
+        modifier = Modifier.fillMaxSize().background(Color.White),
+        indicator = {
+            PullToRefreshDefaults.Indicator(
+                modifier = Modifier.align(Alignment.TopCenter),
+                isRefreshing = isRefreshing,
+                state = pullState,
+                color = Color(0xFF006156)
+            )
+        }
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
         Spacer(modifier = Modifier.height(48.dp))
 
         // Avatar Layout
@@ -113,10 +239,15 @@ fun ProfileScreen(navController: NavController) {
                 Text("YOUR ACHIEVEMENTS", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF9CA3AF))
                 Spacer(modifier = Modifier.height(20.dp))
 
+                val isStreakUnlocked = (stats?.streakCount ?: 1) >= 3
+                val isMasteryUnlocked = (stats?.perfectScoresCount ?: 0) >= 3
+                val isCreatorUnlocked = (stats?.createdDecksCount ?: 0) >= 3
+
+
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                    AchievementBadge("Streak", Icons.Default.Star, true)
-                    AchievementBadge("Mastery", Icons.Default.Star, false)
-                    AchievementBadge("Creator", Icons.Default.Star, false)
+                    AchievementBadge("Streak", "3 review days", Icons.Default.Star, isStreakUnlocked)
+                    AchievementBadge("Mastery", "3 perfect scores", Icons.Default.Star, isMasteryUnlocked)
+                    AchievementBadge("Creator", "3 decks created", Icons.Default.Star, isCreatorUnlocked)
                 }
             }
         }
@@ -126,6 +257,12 @@ fun ProfileScreen(navController: NavController) {
         // Sign Out Controller
         Button(
             onClick = {
+                val sharedPrefs = context.getSharedPreferences("flashlearn_prefs", android.content.Context.MODE_PRIVATE)
+                sharedPrefs.edit()
+                    .remove("logged_in_user_id")
+                    .remove("logged_in_user_name")
+                    .remove("logged_in_user_email")
+                    .apply()
                 com.example.myapplication.network.ApiClient.currentUser = null
                 navController.navigate("welcome") { popUpTo(0) }
             },
@@ -139,11 +276,12 @@ fun ProfileScreen(navController: NavController) {
         }
 
         Spacer(modifier = Modifier.height(40.dp))
+        }
     }
 }
 
 @Composable
-fun AchievementBadge(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, unlocked: Boolean) {
+fun AchievementBadge(label: String, description: String, icon: androidx.compose.ui.graphics.vector.ImageVector, unlocked: Boolean) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
@@ -160,9 +298,14 @@ fun AchievementBadge(label: String, icon: androidx.compose.ui.graphics.vector.Im
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = label,
-            fontSize = 12.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = if (unlocked) Color(0xFF16A34A) else Color(0xFF9CA3AF)
+            color = if (unlocked) Color(0xFF16A34A) else Color(0xFF4B5563)
+        )
+        Text(
+            text = description,
+            fontSize = 10.sp,
+            color = Color(0xFF9CA3AF)
         )
     }
 }

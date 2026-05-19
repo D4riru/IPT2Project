@@ -34,6 +34,8 @@ fun RegisterScreen(navController: NavController) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     fun handleRegister() {
         if (email.isBlank() || password.isBlank() || confirmPassword.isBlank()) {
             errorMessage = "Please fill in all required fields."
@@ -50,6 +52,14 @@ fun RegisterScreen(navController: NavController) {
             coroutineScope.launch {
                 isLoading = false
                 if (response.status == "success") {
+                    val sharedPrefs = context.getSharedPreferences("flashlearn_prefs", android.content.Context.MODE_PRIVATE)
+                    response.user?.let { u ->
+                        sharedPrefs.edit()
+                            .putInt("logged_in_user_id", u.id)
+                            .putString("logged_in_user_name", u.fullName)
+                            .putString("logged_in_user_email", u.email)
+                            .apply()
+                    }
                     navController.navigate("tabs") {
                         popUpTo("welcome") { inclusive = true }
                     }
@@ -107,7 +117,7 @@ fun RegisterScreen(navController: NavController) {
         Spacer(modifier = Modifier.height(24.dp))
 
         errorMessage?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 16.dp))
+            Text(it, color = Color(0xFFDC2626), modifier = Modifier.padding(bottom = 16.dp))
         }
 
         OutlinedTextField(

@@ -122,6 +122,7 @@ fun QuizScreen(navController: NavController, moduleId: String? = null) {
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFF7FAF9))
+            .systemBarsPadding()
             .padding(20.dp)
     ) {
         Spacer(modifier = Modifier.height(24.dp))

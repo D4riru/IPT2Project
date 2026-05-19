@@ -18,25 +18,59 @@ data class User(
     val email: String
 )
 data class AuthResponse(val status: String, val message: String, val user: User?)
-data class ModuleData(val id: String, val title: String, val status: String, val flashcardCount: Int)
+data class ModuleData(val id: String, val title: String, val status: String, val flashcardCount: Int, val shareCode: String = "")
 data class Flashcard(val category: String, val question: String, val options: List<String>, val correctIndex: Int)
-data class StatsResponse(val masteredPercentage: String, val needsReviewCount: String, val needsReviewQuestion: String, val needsReviewHint: String)
+data class StatsResponse(
+    val masteredPercentage: String,
+    val needsReviewCount: String,
+    val needsReviewQuestion: String,
+    val needsReviewHint: String,
+    val streakCount: Int = 1,
+    val createdDecksCount: Int = 0,
+    val perfectScoresCount: Int = 0
+)
+
 
 object ApiClient {
     private const val TAG = "ApiClient"
     
-    // IMPORTANT: 
-    // - Use "http://10.0.2.2:5000" if running in the Android Emulator.
-    // - Replace with your laptop's local IP (e.g. "http://192.168.1.X:5000") if debugging on a physical Xiaomi/Redmi device!
-    var baseUrl = "http://10.171.32.177:5000"
+    val baseUrl: String
+        get() {
+            val brand = android.os.Build.BRAND
+            val device = android.os.Build.DEVICE
+            val model = android.os.Build.MODEL
+            val product = android.os.Build.PRODUCT
+            val hardware = android.os.Build.HARDWARE
+            val fingerprint = android.os.Build.FINGERPRINT
+            val isEmulator = (brand.startsWith("generic") && device.startsWith("generic"))
+                    || fingerprint.startsWith("generic")
+                    || fingerprint.startsWith("unknown")
+                    || hardware.contains("goldfish")
+                    || hardware.contains("ranchu")
+                    || model.contains("google_sdk")
+                    || model.contains("Emulator")
+                    || model.contains("Android SDK built for x86")
+                    || product.contains("sdk_google")
+                    || product.contains("google_sdk")
+                    || product.contains("sdk")
+                    || product.contains("sdk_x86")
+                    || product.contains("emulator")
+            return if (isEmulator) "http://10.0.2.2:5000" else "http://10.171.32.177:5000"
+        }
 
     
     // Keep track of logged-in user
     var currentUser: User? = null
     
     private val client = OkHttpClient.Builder()
-        .connectTimeout(3, TimeUnit.SECONDS)
-        .readTimeout(3, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .build()
+        
+    private val uploadClient = client.newBuilder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
         .build()
         
     private val gson = Gson()
@@ -118,14 +152,53 @@ object ApiClient {
         })
     }
 
-    // 3. Get Modules List
-    fun getModules(onResult: (List<ModuleData>) -> Unit) {
-        val request = Request.Builder().url("$baseUrl/api/modules").get().build()
+    // 2.5 Forgot Password API Call
+    fun forgotPassword(email: String, onResult: (Boolean, String) -> Unit) {
+        val payload = mapOf("email" to email)
+        val body = gson.toJson(payload).toRequestBody(jsonMediaType)
+        val request = Request.Builder().url("$baseUrl/api/forgot-password").post(body).build()
         
         client.newCall(request).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                android.util.Log.e(TAG, "ForgotPassword failed: ${e.message}")
+                onResult(false, "Network error: Could not reach the server. Please check your connection.")
+            }
+
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                response.use {
+                    val bodyStr = response.body?.string() ?: ""
+                    if (response.isSuccessful) {
+                        val res = try {
+                            gson.fromJson(bodyStr, Map::class.java) as? Map<*, *>
+                        } catch(e: Exception) {
+                            null
+                        }
+                        val msg = res?.get("message") as? String ?: "Reset instructions sent successfully!"
+                        onResult(true, msg)
+                    } else {
+                        val res = try {
+                            gson.fromJson(bodyStr, Map::class.java) as? Map<*, *>
+                        } catch(e: Exception) {
+                            null
+                        }
+                        val msg = res?.get("message") as? String ?: "Error: ${response.code}"
+                        onResult(false, msg)
+                    }
+                }
+            }
+        })
+    }
+
+    // 3. Get Modules List
+    fun getModules(onResult: (List<ModuleData>?) -> Unit) {
+        val userId = currentUser?.id ?: 999
+        val request = Request.Builder().url("$baseUrl/api/modules?userId=$userId").get().build()
+        
+        client.newCall(request).enqueue(object : okhttp3.Callback {
+
             override fun onFailure(call: okhttp3.Call, e: IOException) {
                 Log.e(TAG, "Get modules failed or offline: ${e.message}")
-                onResult(emptyList())
+                onResult(null)
             }
 
             override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
@@ -136,7 +209,7 @@ object ApiClient {
                         val list: List<ModuleData> = gson.fromJson(bodyStr, type)
                         onResult(list)
                     } else {
-                        onResult(emptyList())
+                        onResult(null)
                     }
                 }
             }
@@ -145,7 +218,7 @@ object ApiClient {
 
     // 3a. Create Module
     fun createModule(title: String, cards: List<Map<String, String>> = emptyList(), status: String = "Ready", onResult: (Boolean) -> Unit) {
-        val payload = mapOf("title" to title, "status" to status, "cards" to cards)
+        val payload = mapOf("title" to title, "status" to status, "cards" to cards, "userId" to (currentUser?.id ?: 999))
         val body = gson.toJson(payload).toRequestBody(jsonMediaType)
         val request = Request.Builder().url("$baseUrl/api/modules").post(body).build()
         
@@ -161,9 +234,59 @@ object ApiClient {
         })
     }
 
+    // 3d. Upload Document and Generate Quiz
+    fun uploadDocument(fileName: String, fileBytes: ByteArray, onResult: (Boolean, String?) -> Unit) {
+        val mediaType = if (fileName.endsWith(".pdf", ignoreCase = true)) {
+            "application/pdf".toMediaType()
+        } else {
+            "text/plain".toMediaType()
+        }
+        
+        val fileBody = fileBytes.toRequestBody(mediaType)
+        val requestBody = okhttp3.MultipartBody.Builder()
+            .setType(okhttp3.MultipartBody.FORM)
+            .addFormDataPart("file", fileName, fileBody)
+            .addFormDataPart("userId", (currentUser?.id ?: 999).toString())
+            .build()
+            
+        val request = Request.Builder()
+            .url("$baseUrl/api/upload")
+            .post(requestBody)
+            .build()
+            
+        uploadClient.newCall(request).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: IOException) {
+                Log.e(TAG, "Upload document failed or offline: ${e.message}")
+                onResult(false, null)
+            }
+
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                response.use {
+                    if (response.isSuccessful) {
+                        val bodyStr = response.body?.string() ?: ""
+                        val resMap = try {
+                            gson.fromJson<Map<String, Any>>(bodyStr, object : TypeToken<Map<String, Any>>() {}.type)
+                        } catch (e: Exception) {
+                            null
+                        }
+                        val success = resMap?.get("status") == "success"
+                        val id = resMap?.get("id")?.toString()
+                        onResult(success, id)
+                    } else {
+                        Log.e(TAG, "Upload returned error: ${response.code}")
+                        onResult(false, null)
+                    }
+                }
+            }
+        })
+    }
+
     // 3b. Update Module
-    fun updateModule(moduleId: String, title: String, status: String = "Ready", onResult: (Boolean) -> Unit) {
-        val payload = mapOf("title" to title, "status" to status)
+    fun updateModule(moduleId: String, title: String, status: String = "Ready", cards: List<Map<String, String>>? = null, onResult: (Boolean) -> Unit) {
+        val payload = mutableMapOf<String, Any>("title" to title, "status" to status)
+        if (cards != null) {
+            payload["cards"] = cards
+        }
         val body = gson.toJson(payload).toRequestBody(jsonMediaType)
         val request = Request.Builder().url("$baseUrl/api/modules/$moduleId").put(body).build()
         
@@ -178,6 +301,71 @@ object ApiClient {
             }
         })
     }
+
+    // 3e. Import Module via Share Code
+    fun importModule(shareCode: String, onResult: (Boolean, String?) -> Unit) {
+        val payload = mapOf("shareCode" to shareCode, "userId" to (currentUser?.id ?: 999))
+        val body = gson.toJson(payload).toRequestBody(jsonMediaType)
+        val request = Request.Builder().url("$baseUrl/api/modules/import").post(body).build()
+        
+        client.newCall(request).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: IOException) {
+                Log.e(TAG, "Import module failed or offline: ${e.message}")
+                onResult(false, null)
+            }
+
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                response.use {
+                    if (response.isSuccessful) {
+                        val bodyStr = response.body?.string() ?: ""
+                        val resMap = try {
+                            gson.fromJson<Map<String, Any>>(bodyStr, object : TypeToken<Map<String, Any>>() {}.type)
+                        } catch (e: Exception) {
+                            null
+                        }
+                        val success = resMap?.get("status") == "success"
+                        val id = resMap?.get("id")?.toString()
+                        onResult(success, id)
+                    } else {
+                        onResult(false, null)
+                    }
+                }
+            }
+        })
+    }
+
+    // 3f. Generate AI Flashcards from Topic
+    fun generateTopicDeck(topic: String, onResult: (Boolean, String?) -> Unit) {
+        val payload = mapOf("topic" to topic, "userId" to (currentUser?.id ?: 999))
+        val body = gson.toJson(payload).toRequestBody(jsonMediaType)
+        val request = Request.Builder().url("$baseUrl/api/modules/generate-topic").post(body).build()
+        
+        uploadClient.newCall(request).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: IOException) {
+                Log.e(TAG, "Generate topic module failed: ${e.message}")
+                onResult(false, null)
+            }
+
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                response.use {
+                    if (response.isSuccessful) {
+                        val bodyStr = response.body?.string() ?: ""
+                        val resMap = try {
+                            gson.fromJson<Map<String, Any>>(bodyStr, object : TypeToken<Map<String, Any>>() {}.type)
+                        } catch (e: Exception) {
+                            null
+                        }
+                        val success = resMap?.get("status") == "success"
+                        val id = resMap?.get("id")?.toString()
+                        onResult(success, id)
+                    } else {
+                        onResult(false, null)
+                    }
+                }
+            }
+        })
+    }
+
 
     // 3c. Delete Module
     fun deleteModule(moduleId: String, onResult: (Boolean) -> Unit) {
@@ -246,8 +434,8 @@ object ApiClient {
         client.newCall(request).enqueue(object : okhttp3.Callback {
             override fun onFailure(call: okhttp3.Call, e: IOException) {
                 Log.e(TAG, "Get stats failed or offline: ${e.message}")
-                // Fallback mock stats
-                onResult(StatsResponse("85%", "3 Cards", "What is the capital of the Byzantine Empire?", "Hint: It was renamed to Istanbul in modern geography."))
+                // Fallback zero stats
+                onResult(StatsResponse("0%", "0 Cards", "N/A", "N/A", 0, 0, 0))
             }
 
             override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
@@ -257,7 +445,7 @@ object ApiClient {
                         val res = gson.fromJson(bodyStr, StatsResponse::class.java)
                         onResult(res)
                     } else {
-                        onResult(StatsResponse("85%", "3 Cards", "What is the capital of the Byzantine Empire?", "Hint: It was renamed to Istanbul in modern geography."))
+                        onResult(StatsResponse("0%", "0 Cards", "N/A", "N/A", 0, 0, 0))
                     }
                 }
             }
@@ -279,6 +467,46 @@ object ApiClient {
             override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
                 response.use {
                     Log.i(TAG, "Stats updated successfully: ${response.code}")
+                }
+            }
+        })
+    }
+
+    // 7. Profile Avatar APIs
+    fun uploadAvatar(userId: Int, base64Image: String, onResult: (Boolean) -> Unit) {
+        val payload = mapOf("avatar" to base64Image)
+        val body = gson.toJson(payload).toRequestBody(jsonMediaType)
+        val request = Request.Builder().url("$baseUrl/api/users/$userId/avatar").post(body).build()
+        uploadClient.newCall(request).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                onResult(false)
+            }
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                onResult(response.isSuccessful)
+            }
+        })
+    }
+
+    fun getAvatar(userId: Int, onResult: (String?) -> Unit) {
+        val request = Request.Builder().url("$baseUrl/api/users/$userId/avatar").get().build()
+        uploadClient.newCall(request).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                onResult(null)
+            }
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                response.use {
+                    if (response.isSuccessful) {
+                        val bodyStr = response.body?.string() ?: ""
+                        val res = try {
+                            gson.fromJson(bodyStr, Map::class.java) as? Map<*, *>
+                        } catch(e: Exception) {
+                            null
+                        }
+                        val avatar = res?.get("avatar") as? String
+                        onResult(avatar)
+                    } else {
+                        onResult(null)
+                    }
                 }
             }
         })

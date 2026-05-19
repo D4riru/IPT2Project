@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS user_stats (
     needs_review_count INT DEFAULT 0,
     last_reviewed_question TEXT,
     last_reviewed_hint TEXT,
+    streak_count INT DEFAULT 1,
+    created_decks_count INT DEFAULT 0,
+    perfect_scores_count INT DEFAULT 0,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 

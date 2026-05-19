@@ -56,7 +56,7 @@ fun StatsScreen(navController: NavController) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF7FAF9))
+            .background(Color.White)
             .padding(horizontal = 20.dp)
             .verticalScroll(rememberScrollState())
     ) {
